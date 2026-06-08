@@ -17,7 +17,7 @@ validate_mids_input <- function(data) {
 }
 
 validate_imputation_methods <- function(data) {
-  supported_methods <- c("norm", "logreg")
+  supported_methods <- c("norm", "logreg", "pmmrw")
   
   imputed_vars <- names(data$models)
   methods_used <- data$method[imputed_vars]

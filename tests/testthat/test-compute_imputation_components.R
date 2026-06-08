@@ -442,6 +442,28 @@ test_that("compute_imputation_components masks non-imputed observations", {
   expect_true(all(result$S_mis_imp == 0))
 })
 
+test_that("pmmrw does not contribute Gaussian nuisance scores", {
+  data.i <- data.frame(
+    x = c(1, 2, 3, 4),
+    y = c(2, 4, 7, 3),
+    .imputed_y = c(0, 1, 0, 1)
+  )
+
+  model_list <- list(
+    list(
+      method = "pmmrw",
+      family = "gaussian",
+      coefficients = c("(Intercept)" = 0.0, x = 2.0),
+      sigma2 = 1.0
+    )
+  )
+
+  result <- compute_imputation_components(data.i, model_list, "y")
+
+  expect_true(all(result$S_mis_imp == 0))
+  expect_true(all(result$d == 0))
+})
+
 
 test_that("compute_score handles no intercept model", {
   data <- data.frame(
@@ -546,4 +568,3 @@ test_that("compute_information_matrix is always symmetric", {
   
   expect_equal(result, t(result), tolerance = 1e-10)
 })
-

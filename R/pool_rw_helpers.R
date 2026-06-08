@@ -2,6 +2,49 @@ compute_omega <- function(u_bar, n) {
   crossprod(u_bar) / n
 }
 
+normalize_donor_id <- function(donor_id, m, n) {
+  if (is.null(donor_id)) {
+    return(NULL)
+  }
+
+  if (is.data.frame(donor_id)) {
+    donor_id <- as.matrix(donor_id)
+  }
+
+  if (!is.matrix(donor_id) || nrow(donor_id) != n || ncol(donor_id) != m) {
+    cli::cli_abort("{.arg donor_id} must be an {n} by {m} matrix.")
+  }
+
+  x_num <- suppressWarnings(matrix(as.numeric(donor_id), nrow = n, ncol = m))
+  bad_na <- is.na(x_num) & !is.na(donor_id)
+  bad_int <- !is.na(x_num) & x_num != floor(x_num)
+  if (any(bad_na | bad_int)) {
+    cli::cli_abort("{.arg donor_id} values must be integer row numbers or {.code NA}.")
+  }
+
+  bad_range <- !is.na(x_num) & (x_num < 1L | x_num > n)
+  if (any(bad_range)) {
+    cli::cli_abort("{.arg donor_id} values must be row numbers between 1 and {n}.")
+  }
+
+  out <- matrix(as.integer(x_num), nrow = n, ncol = m)
+  dimnames(out) <- dimnames(donor_id)
+  out
+}
+
+cluster_U_by_donor <- function(U, donor_id) {
+  U_cluster <- as.matrix(U)
+  recipients <- which(!is.na(donor_id))
+
+  for (i in recipients) {
+    j <- donor_id[[i]]
+    U_cluster[j, ] <- U_cluster[j, ] + U_cluster[i, ]
+    U_cluster[i, ] <- 0
+  }
+
+  U_cluster
+}
+
 compute_variance_components <- function(results, m, n) {
   kappa_sum <- 0
   alpha_sum <- 0
@@ -28,19 +71,26 @@ compute_variance_components <- function(results, m, n) {
   )
 }
 
-compute_rw_variance <- function(results, m, n) {
+compute_rw_variance <- function(results, m, n, donor_id = NULL) {
+  donor_id <- normalize_donor_id(donor_id, m, n)
+
   U_sum <- Reduce(`+`, lapply(results, function(r) r$U))
+  U_omega_sum <- Reduce(`+`, lapply(seq_len(m), function(p) {
+    U <- results[[p]]$U
+    if (is.null(donor_id)) U else cluster_U_by_donor(U, donor_id[, p])
+  }))
   tau_sum <- Reduce(`+`, lapply(results, function(r) r$tau))
   
   u_bar <- U_sum / m
-  omega <- compute_omega(u_bar, n)
+  u_bar_omega <- U_omega_sum / m
+  omega <- compute_omega(u_bar_omega, n)
   
   components <- compute_variance_components(results, m, n)
   
   delta <- omega + 
     components$kappa %*% components$alpha %*% t(components$kappa) +
-    (1 / n) * (components$kappa %*% t(components$d_bar) %*% u_bar + 
-                 t(components$kappa %*% t(components$d_bar) %*% u_bar))
+    (1 / n) * (components$kappa %*% t(components$d_bar) %*% u_bar_omega + 
+                 t(components$kappa %*% t(components$d_bar) %*% u_bar_omega))
   
   tau <- tau_sum / (m * n)
   tau_inv <- solve(tau)
@@ -48,8 +98,13 @@ compute_rw_variance <- function(results, m, n) {
 }
 
 pool_estimates <- function(results) {
-  coefs <- vapply(results, function(r) stats::coef(r$model), 
-                  numeric(length(stats::coef(results[[1]]$model))))
+  template <- stats::coef(results[[1]]$model)
+  coefs <- vapply(results, function(r) stats::coef(r$model),
+                  numeric(length(template)))
+  if (is.null(dim(coefs))) {
+    coefs <- matrix(coefs, nrow = length(template))
+    rownames(coefs) <- names(template)
+  }
   rowMeans(coefs)
 }
 

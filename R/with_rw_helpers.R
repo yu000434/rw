@@ -14,10 +14,13 @@ extract_single_model <- function(data, var, p) {
   imp_method <- data$method[var]
   
   if (imp_method == "logreg") {
-    list(family = "binomial", coefficients = beta)
+    list(method = imp_method, family = "binomial", coefficients = beta)
   } else if (imp_method == "norm") {
     sigma2 <- extract_sigma2(mod, var)
-    list(family = "gaussian", coefficients = beta, sigma2 = sigma2)
+    list(method = imp_method, family = "gaussian", coefficients = beta, sigma2 = sigma2)
+  } else if (imp_method == "pmmrw") {
+    sigma2 <- extract_sigma2(mod, var)
+    list(method = imp_method, family = "gaussian", coefficients = beta, sigma2 = sigma2)
   } else {
     cli::cli_abort(
       "Unsupported imputation method {.val {imp_method}} for variable {.field {var}}."
@@ -88,8 +91,9 @@ compute_lm_components <- function(mod_analysis, X_analysis) {
   y_analysis <- stats::model.response(stats::model.frame(mod_analysis))
   pred <- stats::fitted(mod_analysis)
   resid <- y_analysis - pred
-  U_analysis <- X_analysis * resid
-  tau <- -crossprod(X_analysis)
+  sigma2 <- summary(mod_analysis)$sigma^2
+  U_analysis <- X_analysis * resid / sigma2
+  tau <- -crossprod(X_analysis) / sigma2
   
   list(U = U_analysis, tau = tau)
 }
@@ -175,4 +179,3 @@ process_imputed_datasets <- function(data, expr, model_list, imputed_vars, m, n,
   
   results
 }
-

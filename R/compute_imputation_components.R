@@ -184,12 +184,20 @@ compute_imputation_components <- function(data.i, model_list, imputed_vars) {
     
     # Create masks: 1 if imputed, 0 if observed
     ImputedMat_var <- matrix(var_imputed == 1, n, n_params, byrow = FALSE)
-    
-    # S_mis_imp: scores for imputed observations only
-    S_mis_imp_list[[i]] <- S_u[, var_cols, drop = FALSE] * ImputedMat_var
-    
-    # S_orig: scores for observed observations only
-    S_orig_list[[i]] <- S_u[, var_cols, drop = FALSE] * (1 - ImputedMat_var)
+
+    if (identical(model_info$method, "pmmrw")) {
+      # PMM copies observed donor values. The Gaussian model supplies the
+      # matching index, but its normal residual score is not a missing-value
+      # density score for the copied value.
+      S_mis_imp_list[[i]] <- S_u[, var_cols, drop = FALSE] * 0
+      S_orig_list[[i]] <- S_u[, var_cols, drop = FALSE] * 0
+    } else {
+      # S_mis_imp: scores for imputed observations only
+      S_mis_imp_list[[i]] <- S_u[, var_cols, drop = FALSE] * ImputedMat_var
+
+      # S_orig: scores for observed observations only
+      S_orig_list[[i]] <- S_u[, var_cols, drop = FALSE] * (1 - ImputedMat_var)
+    }
     
     col_idx <- col_idx + n_params
   }

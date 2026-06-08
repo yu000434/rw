@@ -7,7 +7,7 @@
 with_rw(data, expr, ...)
 }
 \arguments{
-\item{data}{A mids object from mice with parametric imputation methods}
+\item{data}{A mids object from mice with supported imputation methods}
 
 \item{expr}{Expression to evaluate on each imputed dataset (typically a model formula)}
 
@@ -20,12 +20,18 @@ A with_rw object containing fitted models and RW components
 Fit analysis model with Robins-Wang variance calculation
 }
 \details{
-IMPORTANT: This function requires parametric imputation methods that produce
+IMPORTANT: This function requires imputation methods that produce
 score functions and information matrices. Supported methods include:
 \itemize{
-\item norm (for continuous variables)
-\item logreg (for binary variables)
+\item \code{norm} for continuous variables
+\item \code{logreg} for binary variables
+\item \code{pmmrw} for PMM with donor row tracking, using the Gaussian
+working model
 }
+
+For \code{pmmrw}, the Gaussian working model supplies the matching score
+components and the stored donor IDs are used by \code{pool_rw()} for the
+donor-source covariance adjustment.
 }
 \examples{
 \dontrun{

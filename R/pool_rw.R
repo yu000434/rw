@@ -1,6 +1,11 @@
 #' Pool results with Robins-Wang variance
 #' 
 #' @param object A with_rw object from with_rw()
+#' @param donor_id Optional `n` by `m` matrix of PMM donor row IDs for
+#'   donor-source correlation adjustment. If the imputation used
+#'   `method = "pmmrw"` for one variable, these IDs are extracted automatically.
+#'   Entries should be `NA` for rows that were not PMM recipients and the
+#'   observed donor row number for rows imputed from a PMM donor.
 #' @param ... Additional arguments (currently unused)
 #' @return A pool_rw object with pooled estimates and Robins-Wang SEs
 #' 
@@ -13,7 +18,7 @@
 #' summary(pooled)
 #' }
 #' @export
-pool_rw <- function(object, ...) {
+pool_rw <- function(object, donor_id = NULL, ...) {
   if (!inherits(object, "with_rw")) {
     cli::cli_abort(
       "{.arg object} must be a {.cls with_rw} object, not {.cls {class(object)}}."
@@ -23,9 +28,23 @@ pool_rw <- function(object, ...) {
   m <- object$m
   n <- object$n
   results <- object$results
+  methods <- character()
+  if (!is.null(object$mids) && !is.null(object$mids$models)) {
+    methods <- object$mids$method[names(object$mids$models)]
+  }
+  
+  pmmrw_vars <- names(methods)[methods == "pmmrw"]
+  if (is.null(donor_id) && length(pmmrw_vars) == 1L) {
+    donor_id <- extract_donor_id(object$mids, pmmrw_vars)
+  } else if (is.null(donor_id) && length(pmmrw_vars) > 1L) {
+    cli::cli_abort(c(
+      "Multiple {.val pmmrw} variables were found.",
+      "i" = "Please supply the donor ID matrix to use with {.code pool_rw(object, donor_id = donor_id)}."
+    ))
+  }
   
   est <- pool_estimates(results)
-  GAMMA <- compute_rw_variance(results, m, n)
+  GAMMA <- compute_rw_variance(results, m, n, donor_id = donor_id)
   se <- sqrt(diag(GAMMA))
   family <- extract_model_family(results[[1]]$model)
   
@@ -43,6 +62,7 @@ pool_rw <- function(object, ...) {
       variance = GAMMA,
       m = m,
       n = n,
+      donor_correlation = !is.null(donor_id),
       call = match.call()
     ),
     class = "pool_rw"

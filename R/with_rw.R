@@ -1,16 +1,24 @@
 #' Fit analysis model with Robins-Wang variance calculation
 #' 
-#' @param data A mids object from mice with parametric imputation methods
+#' @param data A mids object from mice with supported imputation methods
 #' @param expr Expression to evaluate on each imputed dataset (typically a model formula)
 #' @param ... Additional arguments passed to the analysis function
 #' @return A with_rw object containing fitted models and RW components
 #' 
 #' @details
-#' IMPORTANT: This function requires parametric imputation methods that produce
+#' IMPORTANT: This function requires imputation methods that produce
 #' score functions and information matrices. Supported methods include:
-#' - norm (for continuous variables)
-#' - logreg (for binary variables)
-#' 
+#' \itemize{
+#'   \item `norm` for continuous variables
+#'   \item `logreg` for binary variables
+#'   \item `pmmrw` for numeric PMM with donor row tracking
+#' }
+#'
+#' For `pmmrw`, the Gaussian working model supplies the PMM matching index. The
+#' copied PMM value is not treated as a Gaussian draw in the RW nuisance-score
+#' terms; the stored donor IDs are used by `pool_rw()` for the donor-source
+#' covariance adjustment.
+#'
 #' 
 #' @examples
 #' \dontrun{

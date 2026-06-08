@@ -69,6 +69,41 @@ test_that("compute_omega handles single column", {
   expect_equal(result[1, 1], sum(u_bar^2) / n)
 })
 
+test_that("cluster_U_by_donor aggregates recipient scores to donor rows", {
+  U <- matrix(
+    c(1, 0,
+      2, 0,
+      3, 0,
+      4, 0),
+    nrow = 4,
+    byrow = TRUE
+  )
+  donor_id <- c(NA, 1, NA, 1)
+
+  result <- cluster_U_by_donor(U, donor_id)
+
+  expected <- matrix(
+    c(7, 0,
+      0, 0,
+      3, 0,
+      0, 0),
+    nrow = 4,
+    byrow = TRUE
+  )
+  expect_equal(result, expected)
+})
+
+test_that("normalize_donor_id accepts an n by m matrix", {
+  donor_id <- matrix(c(NA, 1, NA, NA, 2, NA), nrow = 3)
+  expect_equal(normalize_donor_id(donor_id, m = 2, n = 3), donor_id)
+  expect_error(normalize_donor_id(c(NA, 1, NA), m = 1, n = 3),
+               "must be an 3 by 1 matrix")
+  expect_error(normalize_donor_id(matrix(c(NA, 1.5, NA), nrow = 3), m = 1, n = 3),
+               "integer row numbers")
+  expect_error(normalize_donor_id(matrix(c(NA, 4, NA), nrow = 3), m = 1, n = 3),
+               "between 1 and 3")
+})
+
 test_that("compute_variance_components calculates all components", {
   results <- list(
     list(
@@ -243,6 +278,72 @@ test_that("compute_rw_variance handles single imputation", {
   expect_equal(result, t(result))
 })
 
+test_that("compute_rw_variance uses donor-clustered omega when donor_id is supplied", {
+  n <- 3
+  U <- matrix(
+    c(1, 0,
+      2, 0,
+      3, 0),
+    nrow = n,
+    byrow = TRUE
+  )
+  U_cluster <- matrix(
+    c(3, 0,
+      0, 0,
+      3, 0),
+    nrow = n,
+    byrow = TRUE
+  )
+  tau <- diag(2) * n
+  S_mis_imp <- matrix(0, nrow = n, ncol = 1)
+  d <- matrix(0, nrow = n, ncol = 1)
+  results <- list(list(U = U, tau = tau, S_mis_imp = S_mis_imp, d = d))
+
+  donor_id <- matrix(c(NA, 1, NA), ncol = 1)
+  result <- compute_rw_variance(results, m = 1, n = n, donor_id = donor_id)
+
+  expected_omega <- crossprod(U_cluster) / n
+  expected <- expected_omega / n
+  expect_equal(result, expected)
+})
+
+test_that("donor IDs adjust omega and pair the smooth cross term with donor-source U", {
+  n <- 3
+  U <- matrix(
+    c(1, 2,
+      3, 4,
+      5, 6),
+    nrow = n,
+    byrow = TRUE
+  )
+  U_cluster <- matrix(
+    c(4, 6,
+      0, 0,
+      5, 6),
+    nrow = n,
+    byrow = TRUE
+  )
+  tau <- diag(2) * n
+  S_mis_imp <- matrix(c(0.2, 0.4, 0.6), ncol = 1)
+  d <- matrix(c(0.1, 0.3, 0.5), ncol = 1)
+  results <- list(list(U = U, tau = tau, S_mis_imp = S_mis_imp, d = d))
+  donor_id <- matrix(c(NA, 1, NA), ncol = 1)
+
+  result <- compute_rw_variance(results, m = 1, n = n, donor_id = donor_id)
+
+  omega <- crossprod(U_cluster) / n
+  kappa <- crossprod(U, S_mis_imp) / n
+  alpha <- crossprod(d) / n
+  cross <- (1 / n) * (
+    kappa %*% t(d) %*% U_cluster +
+      t(kappa %*% t(d) %*% U_cluster)
+  )
+  expected_delta <- omega + kappa %*% alpha %*% t(kappa) + cross
+  expected <- expected_delta / n
+
+  expect_equal(result, expected)
+})
+
 test_that("construct_pooled_output handles negative estimates", {
   est <- c(x = -2.5)
   se <- c(x = 0.5)
@@ -290,4 +391,3 @@ test_that("compute_variance_components handles single observation", {
   expect_equal(dim(result$alpha), c(2, 2))
   expect_equal(dim(result$d_bar), c(1, 2))
 })
-

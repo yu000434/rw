@@ -197,28 +197,30 @@ test_that("fit_analysis_model rejects non-lm/glm models", {
 })
 
 test_that("compute_lm_components calculates U and tau correctly", {
-  data <- data.frame(y = c(2, 4, 6), x = c(1, 2, 3))
+  data <- data.frame(y = c(2.1, 3.8, 6.2, 7.7), x = c(1, 2, 3, 4))
   mod <- lm(y ~ x, data = data)
   X <- model.matrix(mod)
   
   result <- compute_lm_components(mod, X)
+  sigma2 <- summary(mod)$sigma^2
   
   expect_named(result, c("U", "tau"))
-  expect_equal(nrow(result$U), 3)
+  expect_equal(nrow(result$U), 4)
   expect_equal(ncol(result$U), 2)
   expect_equal(dim(result$tau), c(2, 2))
-  expect_equal(result$tau, -crossprod(X))
+  expect_equal(result$tau, -crossprod(X) / sigma2)
 })
 
 test_that("compute_lm_components U has correct residual structure", {
-  data <- data.frame(y = c(1, 3, 5), x = c(1, 2, 3))
+  data <- data.frame(y = c(1.2, 2.7, 5.1, 6.8), x = c(1, 2, 3, 4))
   mod <- lm(y ~ x, data = data)
   X <- model.matrix(mod)
   
   result <- compute_lm_components(mod, X)
   
   resid <- residuals(mod)
-  expected_U <- X * resid
+  sigma2 <- summary(mod)$sigma^2
+  expected_U <- X * resid / sigma2
   
   expect_equal(result$U, expected_U)
 })
@@ -339,4 +341,3 @@ test_that("compute_analysis_components handles models with subset", {
   expect_equal(sum(result$U[9, ]), 0)
   expect_equal(sum(result$U[10, ]), 0)
 })
-

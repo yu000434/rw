@@ -4,10 +4,16 @@
 \alias{pool_rw}
 \title{Pool results with Robins-Wang variance}
 \usage{
-pool_rw(object, ...)
+pool_rw(object, donor_id = NULL, ...)
 }
 \arguments{
 \item{object}{A with_rw object from with_rw()}
+
+\item{donor_id}{Optional \code{n} by \code{m} matrix of PMM donor row IDs for
+donor-source correlation adjustment. If the imputation used
+\code{method = "pmmrw"} for one variable, these IDs are extracted automatically.
+Entries should be \code{NA} for rows that were not PMM recipients and the
+observed donor row number for rows imputed from a PMM donor.}
 
 \item{...}{Additional arguments (currently unused)}
 }
