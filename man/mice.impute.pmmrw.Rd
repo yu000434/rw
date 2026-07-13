@@ -2,7 +2,7 @@
 % Please edit documentation in R/pmmrw.R
 \name{mice.impute.pmmrw}
 \alias{mice.impute.pmmrw}
-\title{Smooth copied-donor predictive mean matching}
+\title{Smooth predictive mean matching for RW-PMM}
 \usage{
 mice.impute.pmmrw(
   y,
@@ -75,9 +75,10 @@ support within the mice algorithm.}
 A vector of imputed values.
 }
 \description{
-Implements \code{PMM_corrected}: copied donor values are drawn from a smooth PMM
-working law, and the realized donor rows and smooth working scores are stored
-for \code{with_rw()} and \code{pool_rw()}.
+Selects observed donors using a smooth PMM donor-selection law and uses their
+observed values as imputations. The selected donor rows and smooth PMM
+working scores are stored for RW-PMM variance estimation with \code{with_rw()} and
+\code{pool_rw()}.
 }
 \details{
 This method supports numeric variables and requires

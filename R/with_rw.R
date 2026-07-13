@@ -11,8 +11,11 @@
 #' \itemize{
 #'   \item `norm` for continuous variables
 #'   \item `logreg` for binary variables
-#'   \item `pmmrw` for smooth copied-donor PMM (`PMM_corrected`)
+#'   \item `pmmrw` for smooth predictive mean matching used by RW-PMM
 #' }
+#'
+#' The `norm` and `logreg` paths implement RW-MICE for parametric
+#' chained-equation imputation.
 #'
 #' For `pmmrw`, the smooth PMM working score contributes to the RW kappa term.
 #' Stored donor IDs are used by `pool_rw()` to move recipient analysis scores to

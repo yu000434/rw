@@ -20,7 +20,7 @@ smooth_pmm_weights <- function(eta_obs, eta_mis, donors) {
   w0 <- softmax_columns_pmmrw(-sweep(dist2, 2L, lambda0, "*"))
   neff0 <- 1 / colSums(w0 * w0)
 
-  # Current PMM_corrected bandwidth rule.
+  # Current smooth PMM bandwidth rule.
   h <- h_rule * pmax(donors / pmax(neff0, 1e-8), 1e-4)^0.75
   lambda <- 0.5 / pmax(h, h_floor)^2
   weight <- softmax_columns_pmmrw(-sweep(dist2, 2L, lambda, "*"))
@@ -34,11 +34,12 @@ draw_smooth_pmmrw <- function(weight) {
   pmin(donor, nrow(weight))
 }
 
-#' Smooth copied-donor predictive mean matching
+#' Smooth predictive mean matching for RW-PMM
 #'
-#' Implements `PMM_corrected`: copied donor values are drawn from a smooth PMM
-#' working law, and the realized donor rows and smooth working scores are stored
-#' for `with_rw()` and `pool_rw()`.
+#' Selects observed donors using a smooth PMM donor-selection law and uses their
+#' observed values as imputations. The selected donor rows and smooth PMM
+#' working scores are stored for RW-PMM variance estimation with `with_rw()` and
+#' `pool_rw()`.
 #'
 #' @inheritParams mice::mice.impute.pmm
 #' @param donors Target donor width `k` used in the smooth bandwidth rule.

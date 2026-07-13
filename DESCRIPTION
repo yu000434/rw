@@ -9,9 +9,9 @@ Authors@R: c(
   )
 Description: Computes the Robins-Wang variance estimator for analyses performed
   on datasets that have been multiply imputed using the mice package. The core
-  workflow supports norm and logreg imputation models from mice, plus smooth
-  copied-donor predictive mean matching with donor-source corrected analysis
-  scores.
+  package implements RW-MICE for parametric chained-equation imputation using
+  norm and logreg models from mice, and RW-PMM for smooth predictive mean
+  matching with donor-source corrected analysis scores.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

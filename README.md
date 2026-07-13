@@ -12,10 +12,10 @@ coverage](https://codecov.io/gh/LucyMcGowan/rw/graph/badge.svg)](https://app.cod
 
 The purpose of the `rw` package is to compute [Robins-Wang variance
 estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed
-data analyses. The core workflow supports `mice` imputation models
-`method = "norm"` and `method = "logreg"`. For predictive mean matching
-(PMM), `method = "pmmrw"` implements `PMM_corrected`: smooth
-copied-donor PMM with donor-source corrected analysis scores.
+data analyses. The package implements RW-MICE for parametric
+chained-equation imputation using `method = "norm"` or
+`method = "logreg"`, and RW-PMM for smooth predictive mean matching
+using `method = "pmmrw"`.
 
 ## Installation
 
@@ -32,7 +32,7 @@ Then you can install the development version of `rw` like so:
 remotes::install_github("LucyMcGowan/rw")
 ```
 
-## Parametric imputation example
+## RW-MICE with parametric imputation
 
 The first step is to impute your data using `mice`. When using the
 `mice` function, you must set the parameter `tasks = "train"` in order
@@ -96,13 +96,14 @@ pool(fit_rr_norm) |>
 #> 3         hyp  0.15921513 0.3108677  0.51216365  5.073478 0.63004620
 ```
 
-## Smooth copied-donor PMM
+## RW-PMM with smooth predictive mean matching
 
 For PMM, several imputed rows may use the same observed donor value. The
-`pmmrw` imputer draws copied values from a smooth PMM working law and
-stores both its working score and the realized observed donor row. Its
-bandwidth uses the current empirically selected `3/4` donor-width
-scaling.
+`pmmrw` imputer selects an observed donor using a smooth PMM
+donor-selection law and uses that donor’s observed value as the
+imputation. It stores both the smooth PMM working score and the selected
+donor row. Its bandwidth uses the current empirically selected `3/4`
+donor-width scaling.
 
 The RW kappa component uses rowwise analysis scores and the smooth PMM
 working score. Before forming the analysis-score covariance and RW cross

@@ -20,7 +20,7 @@ knitr::opts_chunk$set(
 [![Codecov test coverage](https://codecov.io/gh/LucyMcGowan/rw/graph/badge.svg)](https://app.codecov.io/gh/LucyMcGowan/rw)
 <!-- badges: end -->
 
-The purpose of the `rw` package is to compute [Robins-Wang variance estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed data analyses. The core workflow supports `mice` imputation models `method = "norm"` and `method = "logreg"`. For predictive mean matching (PMM), `method = "pmmrw"` implements `PMM_corrected`: smooth copied-donor PMM with donor-source corrected analysis scores.
+The purpose of the `rw` package is to compute [Robins-Wang variance estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed data analyses. The package implements RW-MICE for parametric chained-equation imputation using `method = "norm"` or `method = "logreg"`, and RW-PMM for smooth predictive mean matching using `method = "pmmrw"`.
 
 ## Installation
 
@@ -37,7 +37,7 @@ remotes::install_github("LucyMcGowan/rw")
 ```
 
 
-## Parametric imputation example
+## RW-MICE with parametric imputation
 
 The first step is to impute your data using `mice`. When using the `mice` function, you must set the parameter `tasks = "train"` in order to pass the necessary parts to our subsequent functions. In this example, we use the `nhanes` data from the mice package and impute the incomplete variables `bmi`, `hyp`, and `chl` using normal working models. The variable `age` has no missing values.
 
@@ -80,12 +80,13 @@ pool(fit_rr_norm) |>
 ```
 
 
-## Smooth copied-donor PMM
+## RW-PMM with smooth predictive mean matching
 
 For PMM, several imputed rows may use the same observed donor value. The
-`pmmrw` imputer draws copied values from a smooth PMM working law and stores
-both its working score and the realized observed donor row. Its bandwidth uses
-the current empirically selected `3/4` donor-width scaling.
+`pmmrw` imputer selects an observed donor using a smooth PMM donor-selection
+law and uses that donor's observed value as the imputation. It stores both the
+smooth PMM working score and the selected donor row. Its bandwidth uses the
+current empirically selected `3/4` donor-width scaling.
 
 The RW kappa component uses rowwise analysis scores and the smooth PMM working
 score. Before forming the analysis-score covariance and RW cross term,
