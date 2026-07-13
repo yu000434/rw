@@ -11,13 +11,13 @@
 #' \itemize{
 #'   \item `norm` for continuous variables
 #'   \item `logreg` for binary variables
-#'   \item `pmmrw` for numeric PMM with donor row tracking
+#'   \item `pmmrw` for smooth copied-donor PMM (`PMM_corrected`)
 #' }
 #'
-#' For `pmmrw`, the Gaussian working model supplies the PMM matching index. The
-#' copied PMM value is not treated as a Gaussian draw in the RW nuisance-score
-#' terms; the stored donor IDs are used by `pool_rw()` for the donor-source
-#' covariance adjustment.
+#' For `pmmrw`, the smooth PMM working score contributes to the RW kappa term.
+#' Stored donor IDs are used by `pool_rw()` to move recipient analysis scores to
+#' their observed donor sources for the analysis-score covariance and RW cross
+#' term.
 #'
 #' 
 #' @examples

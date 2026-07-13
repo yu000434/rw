@@ -20,7 +20,7 @@ knitr::opts_chunk$set(
 [![Codecov test coverage](https://codecov.io/gh/LucyMcGowan/rw/graph/badge.svg)](https://app.codecov.io/gh/LucyMcGowan/rw)
 <!-- badges: end -->
 
-The purpose of the `rw` package is to compute [Robins-Wang variance estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed data analyses. The core workflow currently supports `mice` imputation models `method = "norm"` and `method = "logreg"`. For predictive mean matching (PMM), use `method = "pmmrw"`, a PMM imputer supplied by this package that records the observed donor row used for each imputed recipient. Those donor IDs allow `pool_rw()` to apply a PMM donor-source covariance adjustment to the analysis-score component.
+The purpose of the `rw` package is to compute [Robins-Wang variance estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed data analyses. The core workflow supports `mice` imputation models `method = "norm"` and `method = "logreg"`. For predictive mean matching (PMM), `method = "pmmrw"` implements `PMM_corrected`: smooth copied-donor PMM with donor-source corrected analysis scores.
 
 ## Installation
 
@@ -80,37 +80,18 @@ pool(fit_rr_norm) |>
 ```
 
 
-## PMM imputation with donor-source correlation
+## Smooth copied-donor PMM
 
-For PMM, several imputed rows may use the same observed donor value. Standard `mice` PMM does not save the realized donor row IDs, so `rw` provides `method = "pmmrw"` to record those IDs during imputation. In the donor ID matrix, `donor_id[i, p]` is `NA` if row `i` was not imputed by PMM in imputation `p`; otherwise it is the row number of the observed donor used for row `i`.
+For PMM, several imputed rows may use the same observed donor value. The
+`pmmrw` imputer draws copied values from a smooth PMM working law and stores
+both its working score and the realized observed donor row. Its bandwidth uses
+the current empirically selected `3/4` donor-width scaling.
 
-When donor IDs are available, `pool_rw()` applies the PMM donor-source
-correlation adjustment to the analysis-score covariance term. Let
-\(U_i^{(p)}\) denote the complete-data analysis score contribution for row
-\(i\) in imputation \(p\), and let \(J_i^{(p)}\) be the observed donor row used
-for PMM recipient \(i\). For rows that were not PMM recipients,
-\(J_i^{(p)} = \texttt{NA}\).
-
-For each imputation, `pool_rw()` forms a donor-source score matrix
-\(\widetilde U^{(p)}\) by adding each PMM recipient score contribution to the
-row of its observed donor:
-
-$$\widetilde U_j^{(p)} = U_j^{(p)} + \sum_{i: J_i^{(p)} = j} U_i^{(p)}, \qquad \widetilde U_i^{(p)} = 0 \quad\text{if } J_i^{(p)} \text{ is observed}.$$
-
-
-The analysis-score covariance term is then computed from the donor-source
-scores,
-
-$$\Omega_{\mathrm{PMM}} = \frac{1}{n}\left(\frac{1}{m}\sum_{p=1}^m \widetilde U^{(p)}\right)^\top\left(\frac{1}{m}\sum_{p=1}^m \widetilde U^{(p)}\right).$$
-
-rather than from the ordinary rowwise scores. This adjustment captures the
-correlation induced when several PMM recipients copy values from the same
-observed donor.
-
-The Gaussian working model in `pmmrw` is used to construct the PMM matching
-index; the copied PMM value is not treated as a Gaussian draw in the
-Robins-Wang nuisance-score terms. Regular `norm` and `logreg` imputation
-blocks, if present, still contribute their usual Robins-Wang score components.
+The RW kappa component uses rowwise analysis scores and the smooth PMM working
+score. Before forming the analysis-score covariance and RW cross term,
+`pool_rw()` moves each PMM recipient's analysis-score contribution to its
+observed donor source. Regular `norm` and `logreg` imputation blocks retain
+their ordinary Robins-Wang score components.
 
 Here is a PMM example. We impute `bmi` by PMM using complete predictor `age`, then analyze `bmi ~ age`.
 
@@ -119,25 +100,12 @@ meth_pmm <- make.method(nhanes_scaled)
 meth_pmm[] <- ""
 meth_pmm["bmi"] <- "pmmrw"
 
-meth_std_pmm <- meth_pmm
-meth_std_pmm["bmi"] <- "pmm"
-
 pred_pmm <- make.predictorMatrix(nhanes_scaled)
 pred_pmm[,] <- 0
 pred_pmm["bmi", "age"] <- 1
 ```
 
-Using the same random seed, standard `mice` PMM and `pmmrw` produce the same imputed values. The difference is that `pmmrw` also stores donor row IDs.
-
 ```{r}
-set.seed(1)
-imp_std_pmm <- mice(nhanes_scaled,
-                    method = meth_std_pmm,
-                    predictorMatrix = pred_pmm,
-                    m = 5,
-                    tasks = "train",
-                    print = FALSE)
-
 set.seed(1)
 imp_pmm <- mice(nhanes_scaled,
                 method = meth_pmm,
@@ -145,8 +113,6 @@ imp_pmm <- mice(nhanes_scaled,
                 m = 5,
                 tasks = "train",
                 print = FALSE)
-
-identical(imp_std_pmm$imp$bmi, imp_pmm$imp$bmi)
 
 donor_id <- extract_donor_id(imp_pmm, "bmi")
 head(donor_id)
@@ -156,7 +122,7 @@ head(donor_id)
 fit_rw_pmm <- with_rw(imp_pmm, lm(bmi ~ age))
 
 # donor_id is extracted automatically for method = "pmmrw";
-# pool_rw() then applies the donor-source covariance adjustment.
+# pool_rw() then applies the donor-source analysis-score adjustment.
 pool_rw(fit_rw_pmm)
 ```
 

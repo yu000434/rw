@@ -157,60 +157,29 @@ build_block_diagonal <- function(S2_list) {
 
 
 compute_imputation_components <- function(data.i, model_list, imputed_vars) {
-  # Compute score matrix for all variables
-  S_u <- compute_score_matrix(data.i, model_list, imputed_vars)
-  
-  # Build S_mis_imp and S_orig using variable-specific masks
-  n <- nrow(data.i)
-  col_idx <- 1
   S_mis_imp_list <- list()
-  S_orig_list <- list()
+  d_list <- list()
   
   for (i in seq_along(imputed_vars)) {
     var <- imputed_vars[i]
     model_info <- model_list[[i]]
-    
-    # Determine number of parameters for this variable
-    n_params <- length(model_info$coefficients)
-    if (model_info$family[1] == "gaussian") {
-      n_params <- n_params + 1  # Add 1 for sigma parameter
-    }
-    
-    # Get variable-specific imputation indicator
     var_imputed <- data.i[[paste0(".imputed_", var)]]
-    
-    # Extract columns for this variable
-    var_cols <- col_idx:(col_idx + n_params - 1)
-    
-    # Create masks: 1 if imputed, 0 if observed
-    ImputedMat_var <- matrix(var_imputed == 1, n, n_params, byrow = FALSE)
 
-    if (identical(model_info$method, "pmmrw")) {
-      # PMM copies observed donor values. The Gaussian model supplies the
-      # matching index, but its normal residual score is not a missing-value
-      # density score for the copied value.
-      S_mis_imp_list[[i]] <- S_u[, var_cols, drop = FALSE] * 0
-      S_orig_list[[i]] <- S_u[, var_cols, drop = FALSE] * 0
+    if (identical(unname(model_info$method), "pmmrw")) {
+      S_mis_imp_list[[i]] <- model_info$pmm_score
+      d_list[[i]] <- model_info$pmm_d
     } else {
-      # S_mis_imp: scores for imputed observations only
-      S_mis_imp_list[[i]] <- S_u[, var_cols, drop = FALSE] * ImputedMat_var
-
-      # S_orig: scores for observed observations only
-      S_orig_list[[i]] <- S_u[, var_cols, drop = FALSE] * (1 - ImputedMat_var)
+      score <- compute_score(data.i, model_info, var)
+      imputed_mat <- matrix(var_imputed == 1, nrow(data.i), ncol(score))
+      S_mis_imp_list[[i]] <- score * imputed_mat
+      S_orig <- score * (1 - imputed_mat)
+      information <- compute_information(data.i, model_info, var, var_imputed)
+      d_list[[i]] <- t(-solve(information, t(S_orig)))
     }
-    
-    col_idx <- col_idx + n_params
   }
-  
-  # Combine all variables
+
   S_mis_imp <- do.call(cbind, S_mis_imp_list)
-  S_orig <- do.call(cbind, S_orig_list)
-  
-  # Compute information matrix and its inverse
-  S2 <- compute_information_matrix(data.i, model_list, imputed_vars)
-  Dmat <- solve(S2)
-  
-  d <- t(- Dmat %*% t(S_orig))
-  
+  d <- do.call(cbind, d_list)
+
   list(S_mis_imp = S_mis_imp, d = d)
 }

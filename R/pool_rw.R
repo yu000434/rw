@@ -2,7 +2,7 @@
 #' 
 #' @param object A with_rw object from with_rw()
 #' @param donor_id Optional `n` by `m` matrix of PMM donor row IDs for
-#'   donor-source correlation adjustment. If the imputation used
+#'   donor-source analysis-score adjustment. If the imputation used
 #'   `method = "pmmrw"` for one variable, these IDs are extracted automatically.
 #'   Entries should be `NA` for rows that were not PMM recipients and the
 #'   observed donor row number for rows imputed from a PMM donor.

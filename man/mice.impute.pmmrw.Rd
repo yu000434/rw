@@ -2,7 +2,7 @@
 % Please edit documentation in R/pmmrw.R
 \name{mice.impute.pmmrw}
 \alias{mice.impute.pmmrw}
-\title{Predictive mean matching with donor row tracking}
+\title{Smooth copied-donor predictive mean matching}
 \usage{
 mice.impute.pmmrw(
   y,
@@ -56,30 +56,10 @@ Larger ridges may result in more biased estimates. For highly noisy data
 (e.g. many junk variables), set \code{ridge = 1e-06} or even lower to
 reduce bias. For highly collinear data, set \code{ridge = 1e-04} or higher.}
 
-\item{matchtype}{Type of matching distance. The default (recommended) choice
-(\code{matchtype = 1L}) calculates the distance between
-the \emph{predicted} value of \code{yobs} and
-the \emph{drawn} values of \code{ymis} (called type-1 matching).
-Other choices are \code{matchtype = 0L}
-(distance between predicted values) and \code{matchtype = 2L}
-(distance between drawn values).}
+\item{matchtype, nbins, use.matcher}{Retained for compatibility with the
+\code{mice} PMM interface; they do not replace the current smooth working law.}
 
-\item{donors}{The size of the donor pool among which a draw is made.
-The default is \code{donors = 5L}. Setting \code{donors = 1L} always selects
-the closest match, but is not recommended. Values between 5L and 10L
-provide the best results (Morris et al, 2015).
-For task \code{"train"}, the number of donors
-is calculated internally based on the number of
-observations in \code{yobs}.}
-
-\item{nbins}{The number of bins used to store the predictive mean matching
-model. Under task \code{"train"}, the number of donors
-is calculated internally based on the number of observations in \code{yobs}
-and the number of unique predictive values.}
-
-\item{use.matcher}{Logical. Set \code{use.matcher = TRUE} to specify
-the C function \code{matcher()}, the now deprecated matching function that
-was default in versions of \code{mice} prior to \code{3.12.0}.}
+\item{donors}{Target donor width \code{k} used in the smooth bandwidth rule.}
 
 \item{mlocal}{Experimental. Number of random imputations per missing values
 generated from a fitted model under task \code{"train"}.
@@ -95,16 +75,11 @@ support within the mice algorithm.}
 A vector of imputed values.
 }
 \description{
-This imputation method follows the same basic PMM donor-selection step as
-\code{mice::mice.impute.pmm()}, but stores the observed donor row selected for
-each imputed recipient. Use it inside \code{mice()} with \code{method = "pmmrw"} and
-\code{tasks = "train"} when PMM donor-source correlation will be used by
-\code{pool_rw()}.
+Implements \code{PMM_corrected}: copied donor values are drawn from a smooth PMM
+working law, and the realized donor rows and smooth working scores are stored
+for \code{with_rw()} and \code{pool_rw()}.
 }
 \details{
-The current implementation is intentionally limited to numeric PMM with
-donor row tracking. The recorded donor IDs let downstream variance
-calculations group analysis-score contributions by observed donor source.
-It requires \code{tasks = "train"} and currently does not support \code{exclude},
-\code{use.matcher = TRUE}, or \code{mlocal} values other than 1.
+This method supports numeric variables and requires
+\code{tasks = "train"}.
 }

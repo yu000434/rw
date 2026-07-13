@@ -442,26 +442,30 @@ test_that("compute_imputation_components masks non-imputed observations", {
   expect_true(all(result$S_mis_imp == 0))
 })
 
-test_that("pmmrw does not contribute Gaussian nuisance scores", {
+test_that("pmmrw contributes its stored smooth score and d", {
   data.i <- data.frame(
     x = c(1, 2, 3, 4),
     y = c(2, 4, 7, 3),
     .imputed_y = c(0, 1, 0, 1)
   )
 
+  pmm_score <- matrix(1:8, nrow = 4)
+  pmm_d <- matrix(9:16, nrow = 4)
+
   model_list <- list(
     list(
       method = "pmmrw",
       family = "gaussian",
       coefficients = c("(Intercept)" = 0.0, x = 2.0),
-      sigma2 = 1.0
+      pmm_score = pmm_score,
+      pmm_d = pmm_d
     )
   )
 
   result <- compute_imputation_components(data.i, model_list, "y")
 
-  expect_true(all(result$S_mis_imp == 0))
-  expect_true(all(result$d == 0))
+  expect_equal(result$S_mis_imp, pmm_score)
+  expect_equal(result$d, pmm_d)
 })
 
 

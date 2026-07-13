@@ -19,8 +19,13 @@ extract_single_model <- function(data, var, p) {
     sigma2 <- extract_sigma2(mod, var)
     list(method = imp_method, family = "gaussian", coefficients = beta, sigma2 = sigma2)
   } else if (imp_method == "pmmrw") {
-    sigma2 <- extract_sigma2(mod, var)
-    list(method = imp_method, family = "gaussian", coefficients = beta, sigma2 = sigma2)
+    list(
+      method = imp_method,
+      family = "gaussian",
+      coefficients = beta,
+      pmm_score = mod$pmm_score,
+      pmm_d = mod$pmm_d
+    )
   } else {
     cli::cli_abort(
       "Unsupported imputation method {.val {imp_method}} for variable {.field {var}}."

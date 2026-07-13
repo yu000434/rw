@@ -1,18 +1,51 @@
-#' Predictive mean matching with donor row tracking
+softmax_columns_pmmrw <- function(log_weight) {
+  z <- sweep(log_weight, 2L, apply(log_weight, 2L, max), "-")
+  ez <- exp(z)
+  sweep(ez, 2L, colSums(ez), "/")
+}
+
+smooth_pmm_weights <- function(eta_obs, eta_mis, donors) {
+  delta <- outer(eta_obs, eta_mis, "-")
+  dist2 <- delta * delta
+
+  bw_scale <- min(stats::sd(eta_obs), stats::IQR(eta_obs) / 1.34,
+                  na.rm = TRUE)
+  if (!is.finite(bw_scale) || bw_scale <= 0) {
+    bw_scale <- stats::sd(eta_obs)
+  }
+  h_floor <- max(1e-8 * stats::sd(eta_obs), 1e-12)
+  h_rule <- max(0.9 * bw_scale * length(eta_obs)^(-1 / 5), h_floor)
+
+  lambda0 <- rep(0.5 / h_rule^2, length(eta_mis))
+  w0 <- softmax_columns_pmmrw(-sweep(dist2, 2L, lambda0, "*"))
+  neff0 <- 1 / colSums(w0 * w0)
+
+  # Current PMM_corrected bandwidth rule.
+  h <- h_rule * pmax(donors / pmax(neff0, 1e-8), 1e-4)^0.75
+  lambda <- 0.5 / pmax(h, h_floor)^2
+  weight <- softmax_columns_pmmrw(-sweep(dist2, 2L, lambda, "*"))
+
+  list(delta = delta, weight = weight, lambda = lambda)
+}
+
+draw_smooth_pmmrw <- function(weight) {
+  cum_weight <- apply(weight, 2L, cumsum)
+  donor <- colSums(sweep(cum_weight, 2L, stats::runif(ncol(weight)), "<")) + 1L
+  pmin(donor, nrow(weight))
+}
+
+#' Smooth copied-donor predictive mean matching
 #'
-#' This imputation method follows the same basic PMM donor-selection step as
-#' `mice::mice.impute.pmm()`, but stores the observed donor row selected for
-#' each imputed recipient. Use it inside `mice()` with `method = "pmmrw"` and
-#' `tasks = "train"` when PMM donor-source correlation will be used by
-#' `pool_rw()`.
+#' Implements `PMM_corrected`: copied donor values are drawn from a smooth PMM
+#' working law, and the realized donor rows and smooth working scores are stored
+#' for `with_rw()` and `pool_rw()`.
 #'
 #' @inheritParams mice::mice.impute.pmm
-#' @details
-#' The current implementation is intentionally limited to numeric PMM with
-#' donor row tracking. The recorded donor IDs let downstream variance
-#' calculations group analysis-score contributions by observed donor source.
-#' It requires `tasks = "train"` and currently does not support `exclude`,
-#' `use.matcher = TRUE`, or `mlocal` values other than 1.
+#' @param donors Target donor width `k` used in the smooth bandwidth rule.
+#' @param matchtype,nbins,use.matcher Retained for compatibility with the
+#'   `mice` PMM interface; they do not replace the current smooth working law.
+#' @details This method supports numeric variables and requires
+#'   `tasks = "train"`.
 #' @return A vector of imputed values.
 #' @export
 mice.impute.pmmrw <- function(y, ry, x, wy = NULL, task = "impute", model = NULL,
@@ -38,135 +71,64 @@ mice.impute.pmmrw <- function(y, ry, x, wy = NULL, task = "impute", model = NULL
     stop("`pmmrw` must be used with `tasks = 'train'`.", call. = FALSE)
   }
   if (is.null(model) || !is.environment(model)) {
-    stop("`model` must be an environment; use `tasks = 'train'`.", call. = FALSE)
+    stop("`model` must be an environment; use `tasks = 'train'.", call. = FALSE)
   }
 
-  row_id <- seq_along(y)
-
-  x <- cbind(1, as.matrix(x))
+  n <- length(y)
+  row_id <- seq_len(n)
+  x <- cbind(`(Intercept)` = 1, as.matrix(x))
   parm <- mice:::.norm.draw(y, ry, x, ridge = ridge, ...)
   beta_hat <- drop(parm$coef)
-  beta_dot <- drop(parm$beta)
+  beta_draw <- drop(parm$beta)
 
-  if (matchtype == 0L) {
-    beta_dot <- beta_hat
-  } else if (matchtype == 2L) {
-    beta_hat <- beta_dot
-  }
+  x_obs <- x[ry, , drop = FALSE]
+  x_mis <- x[wy, , drop = FALSE]
+  eta_obs <- as.vector(x_obs %*% beta_draw)
+  eta_mis <- as.vector(x_mis %*% beta_draw)
+  smooth <- smooth_pmm_weights(eta_obs, eta_mis, donors)
+  donor_pos <- draw_smooth_pmmrw(smooth$weight)
 
-  yhat_obs <- as.vector(x[ry, , drop = FALSE] %*% beta_hat)
-  yhat_mis <- as.vector(x[wy, , drop = FALSE] %*% beta_dot)
-
-  nbins <- initialize_nbins_pmmrw(nbins, length(yhat_obs), length(unique(yhat_obs)))
-  donors <- initialize_donors_pmmrw(donors, length(yhat_obs))
-  edges <- stats::quantile(
-    yhat_obs,
-    probs = seq(0, 1, length.out = nbins + 1L),
-    type = 7L,
-    na.rm = TRUE
+  picked <- cbind(donor_pos, seq_len(sum(wy)))
+  two_delta <- 2 * smooth$delta
+  weighted_derivative <- two_delta * smooth$weight
+  mean_derivative <- crossprod(weighted_derivative, x_obs) -
+    sweep(x_mis, 1L, colSums(weighted_derivative), "*")
+  realized_derivative <- sweep(
+    x_obs[donor_pos, , drop = FALSE] - x_mis,
+    1L,
+    2 * smooth$delta[picked],
+    "*"
   )
-  lookup <- bin_yhat_donor_pmmrw(
-    yhat = yhat_obs,
-    y = y[ry],
-    row_id = row_id[ry],
-    k = donors,
-    edges = edges
-  )
-  draws <- draw_neighbors_pmmrw(
-    yhat = yhat_mis,
-    edges = edges,
-    lookup = lookup$value,
-    donor_lookup = lookup$donor_id,
-    mlocal = mlocal
-  )
+  score_mis <- sweep(realized_derivative - mean_derivative, 1L,
+                     -smooth$lambda, "*")
 
-  donor_row <- rep(NA_integer_, length(y))
-  donor_row[wy] <- draws$donor_id[, 1L]
+  sigma_hat <- as.numeric(parm$sigma)
+  residual_obs <- y[ry] - as.vector(x_obs %*% beta_hat)
+  score_orig <- x_obs * (residual_obs / sigma_hat^2)
+  information <- -crossprod(x_obs) / (sigma_hat^2 * n)
+  d_obs <- t(-solve(information, t(score_orig)))
+
+  pmm_score <- matrix(0, n, ncol(x), dimnames = list(NULL, colnames(x)))
+  pmm_d <- matrix(0, n, ncol(x), dimnames = list(NULL, colnames(x)))
+  pmm_score[wy, ] <- score_mis
+  pmm_d[ry, ] <- d_obs
+
+  donor_id <- rep(NA_integer_, n)
+  donor_id[wy] <- row_id[ry][donor_pos]
 
   model$setup <- list(
-    method = "pmmrw",
-    n = length(yhat_obs),
-    task = task,
-    donors = donors,
-    matchtype = matchtype,
-    nbins = nbins,
-    ridge = ridge
+    method = "pmmrw", n = sum(ry), task = task, donors = donors,
+    matchtype = matchtype, nbins = nbins, ridge = ridge
   )
   model$beta.hat <- beta_hat
-  model$beta.dot <- beta_dot
-  model$edges <- edges
-  model$lookup <- lookup$value
-  model$donor_lookup <- lookup$donor_id
-  model$sigma.dot <- parm$sigma
+  model$beta.dot <- beta_draw
+  model$sigma.dot <- sigma_hat
   model$xnames <- colnames(x)
-  model$donor_id <- donor_row
+  model$donor_id <- donor_id
+  model$pmm_score <- pmm_score
+  model$pmm_d <- pmm_d
 
-  draws$value[, 1L]
-}
-
-initialize_nbins_pmmrw <- function(nbins, n, nu) {
-  if (is.null(nbins)) {
-    nbins <- round(4 * log(n) + 1.5)
-  }
-  if (nbins > nu) {
-    nbins <- nu
-  }
-  max(2L, nbins)
-}
-
-initialize_donors_pmmrw <- function(donors, n) {
-  if (is.null(donors)) {
-    donors <- round(n / 600 + 7)
-  }
-  max(1L, min(donors, n))
-}
-
-bin_yhat_donor_pmmrw <- function(yhat, y, row_id, k, edges) {
-  stopifnot(length(yhat) == length(y), length(yhat) == length(row_id))
-
-  sort_order <- order(yhat)
-  yhat_sorted <- yhat[sort_order]
-  y_sorted <- y[sort_order]
-  row_sorted <- row_id[sort_order]
-
-  bin <- findInterval(yhat_sorted, vec = edges, all.inside = TRUE)
-  row_index <- seq_along(y_sorted)
-  index_list <- split(row_index, bin)
-  nbins <- length(edges) - 1L
-
-  lookup_index <- t(vapply(seq_len(nbins), function(b) {
-    index <- index_list[[as.character(b)]]
-    if (length(index) == 0L) {
-      sample(row_index, size = k, replace = TRUE)
-    } else if (length(index) == 1L) {
-      rep(index, k)
-    } else {
-      sample(index, size = k, replace = length(index) < k)
-    }
-  }, integer(k)))
-
-  list(
-    value = matrix(y_sorted[lookup_index], nrow = nbins),
-    donor_id = matrix(row_sorted[lookup_index], nrow = nbins)
-  )
-}
-
-draw_neighbors_pmmrw <- function(yhat, edges, lookup, donor_lookup, mlocal = 1L) {
-  n <- length(yhat)
-  nbins <- length(edges) - 1L
-
-  bin <- findInterval(yhat, edges, rightmost.closed = TRUE, all.inside = TRUE)
-  t0 <- edges[pmax(bin, 1L)]
-  t1 <- edges[pmin(bin + 1L, nbins)]
-  p_left <- ifelse(t1 > t0, (t1 - yhat) / (t1 - t0), 0.5)
-
-  selected_bin <- ifelse(stats::runif(n) < p_left, bin, pmin(bin + 1L, nbins))
-  indices <- matrix(sample(1L:ncol(lookup), n * mlocal, replace = TRUE), nrow = n)
-
-  list(
-    value = matrix(lookup[cbind(selected_bin, indices)], nrow = n, ncol = mlocal),
-    donor_id = matrix(donor_lookup[cbind(selected_bin, indices)], nrow = n, ncol = mlocal)
-  )
+  y[ry][donor_pos]
 }
 
 #' Extract PMM donor row IDs
@@ -213,9 +175,5 @@ extract_donor_id <- function(object, vars = NULL) {
   })
   names(out) <- vars
 
-  if (length(out) == 1L) {
-    out[[1L]]
-  } else {
-    out
-  }
+  if (length(out) == 1L) out[[1L]] else out
 }

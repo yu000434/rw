@@ -12,12 +12,10 @@ coverage](https://codecov.io/gh/LucyMcGowan/rw/graph/badge.svg)](https://app.cod
 
 The purpose of the `rw` package is to compute [Robins-Wang variance
 estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed
-data analyses. The core workflow currently supports `mice` imputation
-models `method = "norm"` and `method = "logreg"`. For predictive mean
-matching (PMM), use `method = "pmmrw"`, a PMM imputer supplied by this
-package that records the observed donor row used for each imputed
-recipient. Those donor IDs allow `pool_rw()` to apply a PMM donor-source
-covariance adjustment to the analysis-score component.
+data analyses. The core workflow supports `mice` imputation models
+`method = "norm"` and `method = "logreg"`. For predictive mean matching
+(PMM), `method = "pmmrw"` implements `PMM_corrected`: smooth
+copied-donor PMM with donor-source corrected analysis scores.
 
 ## Installation
 
@@ -76,7 +74,7 @@ Robins-Wang variance using the `pool_rw` function
 ``` r
 pool_rw(fit_rw_norm)
 #> 
-#> ── Robins-Wang Pooled Results ───────────────────────────────────────────────────────────────────────────────────
+#> ── Robins-Wang Pooled Results ──────────────────────────────────────────────────
 #> Number of imputations: 5
 #> Sample size: 25
 #> 
@@ -98,42 +96,19 @@ pool(fit_rr_norm) |>
 #> 3         hyp  0.15921513 0.3108677  0.51216365  5.073478 0.63004620
 ```
 
-## PMM imputation with donor-source correlation
+## Smooth copied-donor PMM
 
-For PMM, several imputed rows may use the same observed donor value.
-Standard `mice` PMM does not save the realized donor row IDs, so `rw`
-provides `method = "pmmrw"` to record those IDs during imputation. In
-the donor ID matrix, `donor_id[i, p]` is `NA` if row `i` was not imputed
-by PMM in imputation `p`; otherwise it is the row number of the observed
-donor used for row `i`.
+For PMM, several imputed rows may use the same observed donor value. The
+`pmmrw` imputer draws copied values from a smooth PMM working law and
+stores both its working score and the realized observed donor row. Its
+bandwidth uses the current empirically selected `3/4` donor-width
+scaling.
 
-When donor IDs are available, `pool_rw()` applies the PMM donor-source
-correlation adjustment to the analysis-score covariance term. Let
-$U_i^{(p)}$ denote the complete-data analysis score contribution for row
-$i$ in imputation $p$, and let $J_i^{(p)}$ be the observed donor row
-used for PMM recipient $i$. For rows that were not PMM recipients,
-$J_i^{(p)} = \texttt{NA}$.
-
-For each imputation, `pool_rw()` forms a donor-source score matrix
-$\widetilde U^{(p)}$ by adding each PMM recipient score contribution to
-the row of its observed donor:
-
-$$\widetilde U_j^{(p)} = U_j^{(p)} + \sum_{i: J_i^{(p)} = j} U_i^{(p)}, \qquad \widetilde U_i^{(p)} = 0 \quad\text{if } J_i^{(p)} \text{ is observed}.$$
-
-The analysis-score covariance term is then computed from the
-donor-source scores,
-
-$$\Omega_{\mathrm{PMM}} = \frac{1}{n}\left(\frac{1}{m}\sum_{p=1}^m \widetilde U^{(p)}\right)^\top\left(\frac{1}{m}\sum_{p=1}^m \widetilde U^{(p)}\right).$$
-
-rather than from the ordinary rowwise scores. This adjustment captures
-the correlation induced when several PMM recipients copy values from the
-same observed donor.
-
-The Gaussian working model in `pmmrw` is used to construct the PMM
-matching index; the copied PMM value is not treated as a Gaussian draw
-in the Robins-Wang nuisance-score terms. Regular `norm` and `logreg`
-imputation blocks, if present, still contribute their usual Robins-Wang
-score components.
+The RW kappa component uses rowwise analysis scores and the smooth PMM
+working score. Before forming the analysis-score covariance and RW cross
+term, `pool_rw()` moves each PMM recipient’s analysis-score contribution
+to its observed donor source. Regular `norm` and `logreg` imputation
+blocks retain their ordinary Robins-Wang score components.
 
 Here is a PMM example. We impute `bmi` by PMM using complete predictor
 `age`, then analyze `bmi ~ age`.
@@ -143,27 +118,12 @@ meth_pmm <- make.method(nhanes_scaled)
 meth_pmm[] <- ""
 meth_pmm["bmi"] <- "pmmrw"
 
-meth_std_pmm <- meth_pmm
-meth_std_pmm["bmi"] <- "pmm"
-
 pred_pmm <- make.predictorMatrix(nhanes_scaled)
 pred_pmm[,] <- 0
 pred_pmm["bmi", "age"] <- 1
 ```
 
-Using the same random seed, standard `mice` PMM and `pmmrw` produce the
-same imputed values. The difference is that `pmmrw` also stores donor
-row IDs.
-
 ``` r
-set.seed(1)
-imp_std_pmm <- mice(nhanes_scaled,
-                    method = meth_std_pmm,
-                    predictorMatrix = pred_pmm,
-                    m = 5,
-                    tasks = "train",
-                    print = FALSE)
-
 set.seed(1)
 imp_pmm <- mice(nhanes_scaled,
                 method = meth_pmm,
@@ -172,34 +132,31 @@ imp_pmm <- mice(nhanes_scaled,
                 tasks = "train",
                 print = FALSE)
 
-identical(imp_std_pmm$imp$bmi, imp_pmm$imp$bmi)
-#> [1] TRUE
-
 donor_id <- extract_donor_id(imp_pmm, "bmi")
 head(donor_id)
 #>      imp1 imp2 imp3 imp4 imp5
-#> [1,]   22   19   22    7    8
+#> [1,]   22   23   23    5    8
 #> [2,]   NA   NA   NA   NA   NA
-#> [3,]   18   22   14    7   15
-#> [4,]   20   13   13   13   17
+#> [3,]    7    7   15   23    8
+#> [4,]   20   17   13   25   13
 #> [5,]   NA   NA   NA   NA   NA
-#> [6,]   20   17   13   20   20
+#> [6,]   24   17   17   17   24
 ```
 
 ``` r
 fit_rw_pmm <- with_rw(imp_pmm, lm(bmi ~ age))
 
 # donor_id is extracted automatically for method = "pmmrw";
-# pool_rw() then applies the donor-source covariance adjustment.
+# pool_rw() then applies the donor-source analysis-score adjustment.
 pool_rw(fit_rw_pmm)
 #> 
-#> ── Robins-Wang Pooled Results ───────────────────────────────────────────────────────────────────────────────────
+#> ── Robins-Wang Pooled Results ──────────────────────────────────────────────────
 #> Number of imputations: 5
 #> Sample size: 25
 #> 
 #>                    term estimate std.error statistic p.value conf.low conf.high
-#> (Intercept) (Intercept)  0.06773    0.5151    0.1315  0.8965  -0.9978     1.133
-#> age                 age -0.43378    0.6070   -0.7146  0.4821  -1.6895     0.822
+#> (Intercept) (Intercept)  0.04628    0.2131    0.2172  0.8300  -0.3946    0.4871
+#> age                 age -0.34004    0.2194   -1.5497  0.1349  -0.7939    0.1139
 ```
 
 Compare this with Rubin’s rules for the same PMM imputations.
@@ -208,9 +165,9 @@ Compare this with Rubin’s rules for the same PMM imputations.
 fit_rr_pmm <- with(imp_pmm, lm(bmi ~ age))
 pool(fit_rr_pmm) |>
   summary()
-#>          term    estimate std.error  statistic        df    p.value
-#> 1 (Intercept)  0.06773122 0.2362112  0.2867401  8.375472 0.78127746
-#> 2         age -0.43377882 0.2105222 -2.0604897 13.913963 0.05856272
+#>          term    estimate std.error statistic       df   p.value
+#> 1 (Intercept)  0.04628498 0.1897050  0.243984 19.68838 0.8097677
+#> 2         age -0.34003537 0.2217075 -1.533712 11.72681 0.1516263
 ```
 
 ## Giganti & Shepherd Example
@@ -240,7 +197,7 @@ fit_rw <- with_rw(imp, glm(D ~ A, subset = A > 2, family = binomial()))
 pooled <- pool_rw(fit_rw)
 pooled
 #> 
-#> ── Robins-Wang Pooled Results ───────────────────────────────────────────────────────────────────────────────────
+#> ── Robins-Wang Pooled Results ──────────────────────────────────────────────────
 #> Number of imputations: 10
 #> Sample size: 4000
 #> 

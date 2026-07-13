@@ -25,13 +25,13 @@ score functions and information matrices. Supported methods include:
 \itemize{
 \item \code{norm} for continuous variables
 \item \code{logreg} for binary variables
-\item \code{pmmrw} for PMM with donor row tracking, using the Gaussian
-working model
+\item \code{pmmrw} for smooth copied-donor PMM (\code{PMM_corrected})
 }
 
-For \code{pmmrw}, the Gaussian working model supplies the matching score
-components and the stored donor IDs are used by \code{pool_rw()} for the
-donor-source covariance adjustment.
+For \code{pmmrw}, the smooth PMM working score contributes to the RW kappa term.
+Stored donor IDs are used by \code{pool_rw()} to move recipient analysis scores to
+their observed donor sources for the analysis-score covariance and RW cross
+term.
 }
 \examples{
 \dontrun{
