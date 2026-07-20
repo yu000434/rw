@@ -14,8 +14,8 @@ The purpose of the `rw` package is to compute [Robins-Wang variance
 estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed
 data analyses. The package implements RW-MICE for parametric
 chained-equation imputation using `method = "norm"` or
-`method = "logreg"`, and RW-PMM for smooth predictive mean matching
-using `method = "pmmrw"`.
+`method = "logreg"`, and RW-PMM for predictive mean matching using
+`method = "pmmrw"`.
 
 ## Installation
 
@@ -96,59 +96,49 @@ pool(fit_rr_norm) |>
 #> 3         hyp  0.15921513 0.3108677  0.51216365  5.073478 0.63004620
 ```
 
-## RW-PMM with smooth predictive mean matching
+## RW-PMM with predictive mean matching
 
-For PMM, several imputed rows may use the same observed donor value. The
-`pmmrw` imputer selects an observed donor using a smooth PMM
-donor-selection law and uses that donor’s observed value as the
-imputation. It stores both the smooth PMM working score and the selected
-donor row. Its bandwidth uses the current empirically selected `3/4`
-donor-width scaling.
+RW-PMM is the Robins-Wang variance estimator for analyses after
+predictive mean matching. The `pmmrw` method produces the same
+imputations as standard `mice` PMM while storing the additional
+information required by `pool_rw()`.
 
-The RW kappa component uses rowwise analysis scores and the smooth PMM
-working score. Before forming the analysis-score covariance and RW cross
-term, `pool_rw()` moves each PMM recipient’s analysis-score contribution
-to its observed donor source. Regular `norm` and `logreg` imputation
-blocks retain their ordinary Robins-Wang score components.
-
-Here is a PMM example. We impute `bmi` by PMM using complete predictor
-`age`, then analyze `bmi ~ age`.
+Here we impute `bmi` using `age`, then analyze `bmi ~ age`.
 
 ``` r
-meth_pmm <- make.method(nhanes_scaled)
+nhanes_pmm <- nhanes_scaled[c("age", "bmi")]
+
+meth_pmm <- make.method(nhanes_pmm)
 meth_pmm[] <- ""
 meth_pmm["bmi"] <- "pmmrw"
 
-pred_pmm <- make.predictorMatrix(nhanes_scaled)
-pred_pmm[,] <- 0
-pred_pmm["bmi", "age"] <- 1
-```
-
-``` r
 set.seed(1)
-imp_pmm <- mice(nhanes_scaled,
+imp_pmm <- mice(nhanes_pmm,
                 method = meth_pmm,
-                predictorMatrix = pred_pmm,
                 m = 5,
                 tasks = "train",
                 print = FALSE)
+```
 
-donor_id <- extract_donor_id(imp_pmm, "bmi")
-head(donor_id)
-#>      imp1 imp2 imp3 imp4 imp5
-#> [1,]   22   23   23    5    8
-#> [2,]   NA   NA   NA   NA   NA
-#> [3,]    7    7   15   23    8
-#> [4,]   20   17   13   25   13
-#> [5,]   NA   NA   NA   NA   NA
-#> [6,]   24   17   17   17   24
+We can verify that `pmmrw` does not change the imputed values.
+
+``` r
+meth_standard_pmm <- meth_pmm
+meth_standard_pmm["bmi"] <- "pmm"
+
+set.seed(1)
+imp_standard_pmm <- mice(nhanes_pmm,
+                         method = meth_standard_pmm,
+                         m = 5,
+                         tasks = "train",
+                         print = FALSE)
+
+identical(imp_standard_pmm$imp$bmi, imp_pmm$imp$bmi)
+#> [1] TRUE
 ```
 
 ``` r
 fit_rw_pmm <- with_rw(imp_pmm, lm(bmi ~ age))
-
-# donor_id is extracted automatically for method = "pmmrw";
-# pool_rw() then applies the donor-source analysis-score adjustment.
 pool_rw(fit_rw_pmm)
 #> 
 #> ── Robins-Wang Pooled Results ──────────────────────────────────────────────────
@@ -156,8 +146,8 @@ pool_rw(fit_rw_pmm)
 #> Sample size: 25
 #> 
 #>                    term estimate std.error statistic p.value conf.low conf.high
-#> (Intercept) (Intercept)  0.04628    0.2131    0.2172  0.8300  -0.3946    0.4871
-#> age                 age -0.34004    0.2194   -1.5497  0.1349  -0.7939    0.1139
+#> (Intercept) (Intercept)  0.06773    0.3036    0.2231  0.8254  -0.5602    0.6957
+#> age                 age -0.43378    0.2968   -1.4617  0.1573  -1.0477    0.1801
 ```
 
 Compare this with Rubin’s rules for the same PMM imputations.
@@ -166,9 +156,9 @@ Compare this with Rubin’s rules for the same PMM imputations.
 fit_rr_pmm <- with(imp_pmm, lm(bmi ~ age))
 pool(fit_rr_pmm) |>
   summary()
-#>          term    estimate std.error statistic       df   p.value
-#> 1 (Intercept)  0.04628498 0.1897050  0.243984 19.68838 0.8097677
-#> 2         age -0.34003537 0.2217075 -1.533712 11.72681 0.1516263
+#>          term    estimate std.error  statistic        df    p.value
+#> 1 (Intercept)  0.06773122 0.2362112  0.2867401  8.375472 0.78127746
+#> 2         age -0.43377882 0.2105222 -2.0604897 13.913963 0.05856272
 ```
 
 ## Giganti & Shepherd Example

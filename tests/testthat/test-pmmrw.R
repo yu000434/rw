@@ -5,6 +5,8 @@ test_that("pmmrw records donor IDs during mice imputation", {
   method <- mice::make.method(data)
   method[] <- ""
   method["bmi"] <- "pmmrw"
+  method_standard <- method
+  method_standard["bmi"] <- "pmm"
 
   pred <- mice::make.predictorMatrix(data)
   pred[,] <- 0
@@ -19,6 +21,15 @@ test_that("pmmrw records donor IDs during mice imputation", {
     print = FALSE,
     seed = 1
   )
+  imp_standard <- mice::mice(
+    data,
+    method = method_standard,
+    predictorMatrix = pred,
+    m = 2,
+    tasks = "train",
+    print = FALSE,
+    seed = 1
+  )
 
   donor_id <- extract_donor_id(imp, "bmi")
   model <- imp$models$bmi[[1]]
@@ -27,10 +38,36 @@ test_that("pmmrw records donor IDs during mice imputation", {
   expect_true(all(is.na(donor_id[!is.na(data$bmi), ])))
   expect_true(all(!is.na(donor_id[is.na(data$bmi), ])))
   expect_true(all(donor_id[is.na(data$bmi), ] %in% which(!is.na(data$bmi))))
+  expect_identical(imp$imp$bmi, imp_standard$imp$bmi)
   expect_equal(dim(model$pmm_score), c(nrow(data), 2))
   expect_equal(dim(model$pmm_d), c(nrow(data), 2))
+  expect_true(all(is.finite(model$pmm_score)))
   expect_true(any(model$pmm_score != 0))
   expect_true(any(model$pmm_d != 0))
+  expect_named(
+    model$pmm_diagnostics,
+    c("mean_base_width", "mean_donor_width", "mean_working_width")
+  )
+  expect_true(all(model$pmm_diagnostics > 0))
+  expect_gte(
+    model$pmm_diagnostics[["mean_working_width"]],
+    model$pmm_diagnostics[["mean_base_width"]]
+  )
+})
+
+test_that("PMM neighbor draws retain their MICE selection-law state", {
+  yhat <- c(0.25, 1.25)
+  edges <- c(0, 1, 2, 3)
+  lookup <- matrix(1:9, nrow = 3, byrow = TRUE)
+  donor_lookup <- matrix(11:19, nrow = 3, byrow = TRUE)
+
+  set.seed(1)
+  draws <- draw_neighbors_pmmrw(yhat, edges, lookup, donor_lookup)
+
+  expect_equal(draws$bin, c(1L, 2L))
+  expect_equal(draws$p_left, c(0.75, 0.75))
+  expect_true(all(draws$selected_bin %in% c(1L, 2L, 3L)))
+  expect_true(all(draws$donor_id %in% donor_lookup))
 })
 
 test_that("pool_rw automatically uses pmmrw donor IDs", {
@@ -64,12 +101,12 @@ test_that("pool_rw automatically uses pmmrw donor IDs", {
   expect_true(any(fit$results[[1]]$d != 0))
 })
 
-test_that("smooth PMM weights use the current three-quarter bandwidth rule", {
+test_that("base smooth scale uses the three-quarter width rule", {
   eta_obs <- c(-1, 0, 2, 3)
   eta_mis <- c(0.25, 1.5)
   donors <- 5
 
-  result <- smooth_pmm_weights(eta_obs, eta_mis, donors)
+  result <- smooth_pmm_working_scale(eta_obs, eta_mis, donors)
 
   delta <- outer(eta_obs, eta_mis, "-")
   dist2 <- delta^2
@@ -83,5 +120,4 @@ test_that("smooth PMM weights use the current three-quarter bandwidth rule", {
   h <- h_rule * pmax(donors / neff0, 1e-4)^0.75
 
   expect_equal(result$lambda, 0.5 / h^2)
-  expect_equal(colSums(result$weight), c(1, 1))
 })

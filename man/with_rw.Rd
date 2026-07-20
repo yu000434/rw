@@ -25,16 +25,14 @@ score functions and information matrices. Supported methods include:
 \itemize{
 \item \code{norm} for continuous variables
 \item \code{logreg} for binary variables
-\item \code{pmmrw} for smooth predictive mean matching used by RW-PMM
+\item \code{pmmrw} for predictive mean matching used by RW-PMM
 }
 
 The \code{norm} and \code{logreg} paths implement RW-MICE for parametric
 chained-equation imputation.
 
-For \code{pmmrw}, the smooth PMM working score contributes to the RW kappa term.
-Stored donor IDs are used by \code{pool_rw()} to move recipient analysis scores to
-their observed donor sources for the analysis-score covariance and RW cross
-term.
+For \code{pmmrw}, \code{with_rw()} and \code{pool_rw()} use the stored imputation information
+to compute RW-PMM.
 }
 \examples{
 \dontrun{

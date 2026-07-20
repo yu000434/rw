@@ -20,7 +20,7 @@ knitr::opts_chunk$set(
 [![Codecov test coverage](https://codecov.io/gh/LucyMcGowan/rw/graph/badge.svg)](https://app.codecov.io/gh/LucyMcGowan/rw)
 <!-- badges: end -->
 
-The purpose of the `rw` package is to compute [Robins-Wang variance estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed data analyses. The package implements RW-MICE for parametric chained-equation imputation using `method = "norm"` or `method = "logreg"`, and RW-PMM for smooth predictive mean matching using `method = "pmmrw"`.
+The purpose of the `rw` package is to compute [Robins-Wang variance estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed data analyses. The package implements RW-MICE for parametric chained-equation imputation using `method = "norm"` or `method = "logreg"`, and RW-PMM for predictive mean matching using `method = "pmmrw"`.
 
 ## Installation
 
@@ -80,50 +80,47 @@ pool(fit_rr_norm) |>
 ```
 
 
-## RW-PMM with smooth predictive mean matching
+## RW-PMM with predictive mean matching
 
-For PMM, several imputed rows may use the same observed donor value. The
-`pmmrw` imputer selects an observed donor using a smooth PMM donor-selection
-law and uses that donor's observed value as the imputation. It stores both the
-smooth PMM working score and the selected donor row. Its bandwidth uses the
-current empirically selected `3/4` donor-width scaling.
+RW-PMM is the Robins-Wang variance estimator for analyses after predictive mean
+matching. The `pmmrw` method produces the same imputations as standard `mice`
+PMM while storing the additional information required by `pool_rw()`.
 
-The RW kappa component uses rowwise analysis scores and the smooth PMM working
-score. Before forming the analysis-score covariance and RW cross term,
-`pool_rw()` moves each PMM recipient's analysis-score contribution to its
-observed donor source. Regular `norm` and `logreg` imputation blocks retain
-their ordinary Robins-Wang score components.
-
-Here is a PMM example. We impute `bmi` by PMM using complete predictor `age`, then analyze `bmi ~ age`.
+Here we impute `bmi` using `age`, then analyze `bmi ~ age`.
 
 ```{r}
-meth_pmm <- make.method(nhanes_scaled)
+nhanes_pmm <- nhanes_scaled[c("age", "bmi")]
+
+meth_pmm <- make.method(nhanes_pmm)
 meth_pmm[] <- ""
 meth_pmm["bmi"] <- "pmmrw"
 
-pred_pmm <- make.predictorMatrix(nhanes_scaled)
-pred_pmm[,] <- 0
-pred_pmm["bmi", "age"] <- 1
-```
-
-```{r}
 set.seed(1)
-imp_pmm <- mice(nhanes_scaled,
+imp_pmm <- mice(nhanes_pmm,
                 method = meth_pmm,
-                predictorMatrix = pred_pmm,
                 m = 5,
                 tasks = "train",
                 print = FALSE)
+```
 
-donor_id <- extract_donor_id(imp_pmm, "bmi")
-head(donor_id)
+We can verify that `pmmrw` does not change the imputed values.
+
+```{r}
+meth_standard_pmm <- meth_pmm
+meth_standard_pmm["bmi"] <- "pmm"
+
+set.seed(1)
+imp_standard_pmm <- mice(nhanes_pmm,
+                         method = meth_standard_pmm,
+                         m = 5,
+                         tasks = "train",
+                         print = FALSE)
+
+identical(imp_standard_pmm$imp$bmi, imp_pmm$imp$bmi)
 ```
 
 ```{r}
 fit_rw_pmm <- with_rw(imp_pmm, lm(bmi ~ age))
-
-# donor_id is extracted automatically for method = "pmmrw";
-# pool_rw() then applies the donor-source analysis-score adjustment.
 pool_rw(fit_rw_pmm)
 ```
 

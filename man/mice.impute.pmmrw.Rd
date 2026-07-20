@@ -2,7 +2,7 @@
 % Please edit documentation in R/pmmrw.R
 \name{mice.impute.pmmrw}
 \alias{mice.impute.pmmrw}
-\title{Smooth predictive mean matching for RW-PMM}
+\title{Predictive mean matching for RW-PMM}
 \usage{
 mice.impute.pmmrw(
   y,
@@ -56,10 +56,9 @@ Larger ridges may result in more biased estimates. For highly noisy data
 (e.g. many junk variables), set \code{ridge = 1e-06} or even lower to
 reduce bias. For highly collinear data, set \code{ridge = 1e-04} or higher.}
 
-\item{matchtype, nbins, use.matcher}{Retained for compatibility with the
-\code{mice} PMM interface; they do not replace the current smooth working law.}
+\item{matchtype, nbins, use.matcher}{PMM matching options.}
 
-\item{donors}{Target donor width \code{k} used in the smooth bandwidth rule.}
+\item{donors}{The PMM donor-pool size.}
 
 \item{mlocal}{Experimental. Number of random imputations per missing values
 generated from a fitted model under task \code{"train"}.
@@ -75,12 +74,12 @@ support within the mice algorithm.}
 A vector of imputed values.
 }
 \description{
-Selects observed donors using a smooth PMM donor-selection law and uses their
-observed values as imputations. The selected donor rows and smooth PMM
-working scores are stored for RW-PMM variance estimation with \code{with_rw()} and
-\code{pool_rw()}.
+Uses the same PMM imputations as \code{mice::mice.impute.pmm()} while storing the
+donor and working-score information needed for RW-PMM variance estimation
+with \code{with_rw()} and \code{pool_rw()}.
 }
 \details{
-This method supports numeric variables and requires
-\code{tasks = "train"}.
+The completed values follow standard MICE PMM. The additional
+working score is used only by \code{pool_rw()} for RW-PMM variance estimation.
+This method supports numeric variables and requires \code{tasks = "train"}.
 }
