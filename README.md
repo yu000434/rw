@@ -1,28 +1,25 @@
+---
+output: github_document
+---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
+
+
 
 # `R/rw`: Robins-Wang variance estimation for multiple imputation
 
 <!-- badges: start -->
-
 [![R-CMD-check](https://github.com/LucyMcGowan/rw/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/LucyMcGowan/rw/actions/workflows/R-CMD-check.yaml)
-[![Codecov test
-coverage](https://codecov.io/gh/LucyMcGowan/rw/graph/badge.svg)](https://app.codecov.io/gh/LucyMcGowan/rw)
+[![Codecov test coverage](https://codecov.io/gh/LucyMcGowan/rw/graph/badge.svg)](https://app.codecov.io/gh/LucyMcGowan/rw)
 <!-- badges: end -->
 
-The purpose of the `rw` package is to compute [Robins-Wang variance
-estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed
-data analyses. The package implements RW-MICE for parametric
-chained-equation imputation using `method = "norm"` or
-`method = "logreg"`, and RW-PMM for predictive mean matching using
-`method = "pmmrw"`.
+The purpose of the `rw` package is to compute [Robins-Wang variance estimates](https://doi.org/10.1093/biomet/87.1.113) for multiply imputed data analyses. The package implements RW-MICE for parametric chained-equation imputation using `method = "norm"` or `method = "logreg"`, and RW-PMM for predictive mean matching using `method = "pmmrw"`.
 
 ## Installation
 
-This package requires the development version of mice with the `tasks`
-argument:
+This package requires the development version of mice with the `tasks` argument:
 
-``` r
+```r
 remotes::install_github("amices/mice@dev")
 ```
 
@@ -32,14 +29,11 @@ Then you can install the development version of `rw` like so:
 remotes::install_github("LucyMcGowan/rw")
 ```
 
+
 ## RW-MICE with parametric imputation
 
-The first step is to impute your data using `mice`. When using the
-`mice` function, you must set the parameter `tasks = "train"` in order
-to pass the necessary parts to our subsequent functions. In this
-example, we use the `nhanes` data from the mice package and impute the
-incomplete variables `bmi`, `hyp`, and `chl` using normal working
-models. The variable `age` has no missing values.
+The first step is to impute your data using `mice`. When using the `mice` function, you must set the parameter `tasks = "train"` in order to pass the necessary parts to our subsequent functions. In this example, we use the `nhanes` data from the mice package and impute the incomplete variables `bmi`, `hyp`, and `chl` using normal working models. The variable `age` has no missing values.
+
 
 ``` r
 library(rw)
@@ -58,18 +52,15 @@ imp_norm <- mice(nhanes_scaled,
                  print = FALSE)
 ```
 
-Now, suppose we want to fit a model predicting `bmi` from `age` and
-`hyp`. The `with_rw` function allows this, where the first argument is
-the imputation object from the `mice` function above and the second is
-the model expression. Note that currently outcome models must be
-Gaussian or Binomial.
+Now, suppose we want to fit a model predicting `bmi` from `age` and `hyp`. The `with_rw` function allows this, where the first argument is the imputation object from the `mice` function above and the second is the model expression. Note that currently outcome models must be Gaussian or Binomial.
+
 
 ``` r
 fit_rw_norm <- with_rw(imp_norm, lm(bmi ~ age + hyp))
 ```
 
-Finally, we can pool the results from the fit object and calculate the
-Robins-Wang variance using the `pool_rw` function
+Finally, we can pool the results from the fit object and calculate the Robins-Wang variance using the `pool_rw` function
+
 
 ``` r
 pool_rw(fit_rw_norm)
@@ -84,7 +75,8 @@ pool_rw(fit_rw_norm)
 #> hyp                 hyp  0.15922    2.1031   0.07570  0.9403   -4.202     4.521
 ```
 
-Let’s compare this result to using Rubin’s rules.
+Let's compare this result to using Rubin's rules.
+
 
 ``` r
 fit_rr_norm <- with(imp_norm, lm(bmi ~ age + hyp))
@@ -96,14 +88,18 @@ pool(fit_rr_norm) |>
 #> 3         hyp  0.15921513 0.3108677  0.51216365  5.073478 0.63004620
 ```
 
+
 ## RW-PMM with predictive mean matching
 
-RW-PMM is the Robins-Wang variance estimator for analyses after
-predictive mean matching. The `pmmrw` method produces the same
-imputations as standard `mice` PMM while storing the additional
-information required by `pool_rw()`.
+RW-PMM is the Robins-Wang variance estimator for analyses after predictive mean
+matching. The `pmmrw` method uses the ordinary MICE hard donor draw and stores
+the realized donor row. It additionally evaluates that donor under a smooth
+all-observed-donor working law to construct the score required by `pool_rw()`.
+The working law affects variance estimation only; it does not generate the
+completed values.
 
 Here we impute `bmi` using `age`, then analyze `bmi ~ age`.
+
 
 ``` r
 nhanes_pmm <- nhanes_scaled[c("age", "bmi")]
@@ -122,6 +118,7 @@ imp_pmm <- mice(nhanes_pmm,
 
 We can verify that `pmmrw` does not change the imputed values.
 
+
 ``` r
 meth_standard_pmm <- meth_pmm
 meth_standard_pmm["bmi"] <- "pmm"
@@ -130,12 +127,12 @@ set.seed(1)
 imp_standard_pmm <- mice(nhanes_pmm,
                          method = meth_standard_pmm,
                          m = 5,
-                         tasks = "train",
                          print = FALSE)
 
 identical(imp_standard_pmm$imp$bmi, imp_pmm$imp$bmi)
 #> [1] TRUE
 ```
+
 
 ``` r
 fit_rw_pmm <- with_rw(imp_pmm, lm(bmi ~ age))
@@ -146,28 +143,27 @@ pool_rw(fit_rw_pmm)
 #> Sample size: 25
 #> 
 #>                    term estimate std.error statistic p.value conf.low conf.high
-#> (Intercept) (Intercept)  0.06773    0.3036    0.2231  0.8254  -0.5602    0.6957
-#> age                 age -0.43378    0.2968   -1.4617  0.1573  -1.0477    0.1801
+#> (Intercept) (Intercept)  0.03964    0.2277    0.1741 0.86332  -0.4314   0.51071
+#> age                 age -0.41510    0.2287   -1.8151 0.08257  -0.8882   0.05798
 ```
 
-Compare this with Rubin’s rules for the same PMM imputations.
+Compare this with Rubin's rules for the same PMM imputations.
+
 
 ``` r
 fit_rr_pmm <- with(imp_pmm, lm(bmi ~ age))
 pool(fit_rr_pmm) |>
   summary()
-#>          term    estimate std.error  statistic        df    p.value
-#> 1 (Intercept)  0.06773122 0.2362112  0.2867401  8.375472 0.78127746
-#> 2         age -0.43377882 0.2105222 -2.0604897 13.913963 0.05856272
+#>          term    estimate std.error  statistic       df   p.value
+#> 1 (Intercept)  0.03964233 0.2685663  0.1476073 6.753534 0.8869625
+#> 2         age -0.41510057 0.2454958 -1.6908662 9.662300 0.1228050
 ```
 
 ## Giganti & Shepherd Example
 
-Below is an example to replicate the [Giganti & Shepherd
-(2020)](https://doi.org/10.1093/aje/kwaa153) results. This example uses
-the parametric `norm` and `logreg` imputation models and demonstrates
-the original Robins-Wang workflow; it is not a PMM correlation-adjusted
-example.
+
+Below is an example to replicate the [Giganti & Shepherd (2020)](https://doi.org/10.1093/aje/kwaa153) results. This example uses the parametric `norm` and `logreg` imputation models and demonstrates the original Robins-Wang workflow; it is not a PMM correlation-adjusted example.
+
 
 ``` r
 set.seed(1)

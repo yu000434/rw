@@ -83,8 +83,11 @@ pool(fit_rr_norm) |>
 ## RW-PMM with predictive mean matching
 
 RW-PMM is the Robins-Wang variance estimator for analyses after predictive mean
-matching. The `pmmrw` method produces the same imputations as standard `mice`
-PMM while storing the additional information required by `pool_rw()`.
+matching. The `pmmrw` method uses the ordinary MICE hard donor draw and stores
+the realized donor row. It additionally evaluates that donor under a smooth
+all-observed-donor working law to construct the score required by `pool_rw()`.
+The working law affects variance estimation only; it does not generate the
+completed values.
 
 Here we impute `bmi` using `age`, then analyze `bmi ~ age`.
 
@@ -113,7 +116,6 @@ set.seed(1)
 imp_standard_pmm <- mice(nhanes_pmm,
                          method = meth_standard_pmm,
                          m = 5,
-                         tasks = "train",
                          print = FALSE)
 
 identical(imp_standard_pmm$imp$bmi, imp_pmm$imp$bmi)
